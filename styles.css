@@ -83,11 +83,55 @@ body {
   border: 1px solid var(--hairline);
   border-radius: var(--radius);
   padding: 24px clamp(18px, 4vw, 28px);
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  position: relative;
+  transition: opacity 0.3s ease, background 0.3s ease;
 }
-.job-card.removing {
-  opacity: 0;
-  transform: scale(0.97);
+
+.job-card.state-completed {
+  border-color: var(--accent-blue);
+  background: #F3F7F9;
+}
+.job-card.state-skipped {
+  opacity: 0.55;
+}
+
+.status-badge {
+  position: absolute;
+  top: 20px;
+  right: clamp(18px, 4vw, 28px);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.badge-completed {
+  background: var(--accent-blue);
+  color: #fff;
+}
+.badge-skipped {
+  background: var(--hairline);
+  color: var(--ink-soft);
+}
+
+.complete-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  user-select: none;
+}
+.complete-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-blue);
+  cursor: pointer;
+}
+.complete-check input:disabled {
+  cursor: default;
 }
 
 .job-eyebrow {
