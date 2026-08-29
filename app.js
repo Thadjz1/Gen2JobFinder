@@ -84,13 +84,17 @@ function buildCard(job) {
     ? `<p class="excerpt-note">This may be an excerpt — <a href="${job.ApplyURL}" target="_blank" rel="noopener">view the full posting</a>.</p>`
     : '';
 
+  const scoreLabel = job.Score ? `<span class="match-score">${escapeHtml(String(job.Score))}% match</span>` : '';
+  const salaryLabel = job.SalaryRange ? ` (${escapeHtml(job.SalaryRange)})` : '';
+  const dateLabel = formatDate_(job.PostedDate);
+
   const resumeBtn = job.ResumePdfUrl
-    ? `<a class="btn btn-secondary" href="${job.ResumePdfUrl}" target="_blank" rel="noopener">Resume</a>`
-    : `<span class="btn btn-secondary" style="opacity:.5;cursor:default;">Resume (preparing…)</span>`;
+    ? `<a class="btn btn-secondary" href="${job.ResumePdfUrl}" target="_blank" rel="noopener">Download Resume</a>`
+    : `<span class="btn btn-secondary" style="opacity:.5;cursor:default;">Preparing…</span>`;
 
   const coverBtn = job.CoverLetterPdfUrl
-    ? `<a class="btn btn-secondary" href="${job.CoverLetterPdfUrl}" target="_blank" rel="noopener">Cover Letter</a>`
-    : `<span class="btn btn-secondary" style="opacity:.5;cursor:default;">Cover Letter (preparing…)</span>`;
+    ? `<a class="btn btn-secondary" href="${job.CoverLetterPdfUrl}" target="_blank" rel="noopener">Draft Cover Letter</a>`
+    : `<span class="btn btn-secondary" style="opacity:.5;cursor:default;">Preparing…</span>`;
 
   const statusBadge = state === 'completed'
     ? `<div class="status-badge badge-completed">✓ Applied</div>`
@@ -100,16 +104,25 @@ function buildCard(job) {
 
   card.innerHTML = `
     ${statusBadge}
-    <div class="job-eyebrow">${escapeHtml(job.Company || 'Unknown company')}</div>
-    <h2 class="job-title">${escapeHtml(job.Title || 'Untitled role')}</h2>
-    <div class="job-meta">${escapeHtml(job.Location || '')}</div>
+    <div class="card-row title-row">
+      <h2 class="job-title">${escapeHtml(job.Title || 'Untitled role')}</h2>
+      ${scoreLabel}
+    </div>
+    <div class="job-company">Company Name: ${escapeHtml(job.Company || 'Unknown')}</div>
+    <div class="card-row meta-row">
+      <span>${escapeHtml(job.Location || 'Location not listed')}${salaryLabel}</span>
+      <span class="meta-date">${dateLabel}</span>
+    </div>
     <div class="job-description">${escapeHtml(job.FullDescription || 'No description available.')}</div>
-    <button class="desc-toggle">Read full description</button>
+    <button class="desc-toggle">Read more</button>
     ${excerptNote}
-    <div class="job-actions">
-      <a class="btn btn-primary apply-btn" href="${job.ApplyURL}" target="_blank" rel="noopener">Apply</a>
+    <div class="card-row resume-row">
+      <span class="resume-label">Tailored from your master resume</span>
       ${resumeBtn}
+    </div>
+    <div class="card-row action-row">
       ${coverBtn}
+      <a class="btn btn-primary apply-btn" href="${job.ApplyURL}" target="_blank" rel="noopener">Apply</a>
       <button class="btn btn-ghost skip-btn">Skip</button>
     </div>
     <label class="complete-check">
@@ -123,7 +136,7 @@ function buildCard(job) {
   const toggleBtn = card.querySelector('.desc-toggle');
   toggleBtn.addEventListener('click', () => {
     descEl.classList.toggle('expanded');
-    toggleBtn.textContent = descEl.classList.contains('expanded') ? 'Show less' : 'Read full description';
+    toggleBtn.textContent = descEl.classList.contains('expanded') ? 'Show less' : 'Read more';
   });
 
   // Apply is just a plain link now — no side effects. Progress is only
@@ -147,6 +160,13 @@ function buildCard(job) {
   });
 
   return card;
+}
+
+function formatDate_(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function escapeHtml(str) {
