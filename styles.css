@@ -194,6 +194,9 @@ body {
   justify-content: center;
   z-index: 10;
 }
+.reason-overlay[hidden] {
+  display: none;
+}
 @media (min-width: 640px) {
   .reason-overlay { align-items: center; }
 }
