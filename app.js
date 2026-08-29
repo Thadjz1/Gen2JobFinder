@@ -28,16 +28,26 @@ function renderTracker(totalSlots, filledCount) {
   }
 }
 
-// ---- Fetch current batch from the backend ----
-async function fetchJobs() {
-  try {
-    const res = await fetch(WEB_APP_URL);
-    const data = await res.json();
+// ---- Fetch current batch from the backend (via JSONP — see note in Code.gs) ----
+function fetchJobs() {
+  const callbackName = 'jobsCallback_' + Date.now();
+  window[callbackName] = function (data) {
     renderBoard(data.jobs || []);
-  } catch (err) {
+    cleanupJsonpScript_(callbackName, script);
+  };
+
+  const script = document.createElement('script');
+  script.src = `${WEB_APP_URL}?callback=${callbackName}`;
+  script.onerror = () => {
     board.innerHTML = `<div class="state-message">Couldn't load today's batch. Check back shortly.</div>`;
-    console.error(err);
-  }
+    cleanupJsonpScript_(callbackName, script);
+  };
+  document.body.appendChild(script);
+}
+
+function cleanupJsonpScript_(callbackName, script) {
+  delete window[callbackName];
+  if (script && script.parentNode) script.parentNode.removeChild(script);
 }
 
 // ---- Render job cards ----
@@ -154,16 +164,21 @@ function removeCard(card) {
   }, 300);
 }
 
-// ---- Send apply/skip action to the backend ----
-// NOTE: sent as text/plain (not application/json) so the browser treats this
-// as a "simple request" and skips the CORS preflight, which Apps Script web
-// apps don't handle. The backend still JSON.parses the body normally.
+// ---- Send apply/skip action to the backend (also via JSONP, same reason as above) ----
 function sendAction(jobId, action, reason) {
-  fetch(WEB_APP_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ jobId, action, reason })
-  }).catch(err => console.error('Failed to record action:', err));
+  const callbackName = 'actionCallback_' + Date.now();
+  window[callbackName] = function () {
+    cleanupJsonpScript_(callbackName, script);
+  };
+
+  const params = new URLSearchParams({ action, jobId, reason: reason || '', callback: callbackName });
+  const script = document.createElement('script');
+  script.src = `${WEB_APP_URL}?${params.toString()}`;
+  script.onerror = () => {
+    console.error('Failed to record action for job', jobId);
+    cleanupJsonpScript_(callbackName, script);
+  };
+  document.body.appendChild(script);
 }
 
 fetchJobs();
