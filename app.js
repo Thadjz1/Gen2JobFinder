@@ -1,6 +1,5 @@
 // ============================================================
-// CONFIG — paste your deployed Apps Script Web App URL here
-// (Deploy > New deployment > Web app > copy the URL ending in /exec)
+// CONFIG — your deployed Apps Script Web App URL
 // ============================================================
 const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzG74xFfSUfgcQt4VuMNnp84HjUptvYGVadgop0efzHaVhcODafcq92m1pbvnJ6oOk/exec';
 
@@ -10,8 +9,10 @@ const reasonOverlay = document.getElementById('reasonOverlay');
 const reasonCancel = document.getElementById('reasonCancel');
 
 let pendingSkipJobId = null;
+let currentJobs = [];   // the batch currently on screen
+let jobStates = {};     // jobId -> 'pending' | 'completed' | 'skipped'
 
-// ---- Batch progress tracker (5 cups) ----
+// ---- Batch progress tracker (cups fill in as cards get completed/skipped) ----
 function renderTracker(totalSlots, filledCount) {
   batchTracker.innerHTML = '';
   for (let i = 0; i < totalSlots; i++) {
@@ -28,11 +29,20 @@ function renderTracker(totalSlots, filledCount) {
   }
 }
 
+function updateTracker() {
+  const doneCount = currentJobs.filter(j => jobStates[j.JobID] !== 'pending').length;
+  renderTracker(Math.max(currentJobs.length, 1), doneCount);
+}
+
 // ---- Fetch current batch from the backend (via JSONP — see note in Code.gs) ----
 function fetchJobs() {
+  board.innerHTML = `<div class="state-message">Brewing today's batch…</div>`;
   const callbackName = 'jobsCallback_' + Date.now();
   window[callbackName] = function (data) {
-    renderBoard(data.jobs || []);
+    currentJobs = data.jobs || [];
+    jobStates = {};
+    currentJobs.forEach(j => { jobStates[j.JobID] = 'pending'; });
+    renderBoard();
     cleanupJsonpScript_(callbackName, script);
   };
 
@@ -50,22 +60,23 @@ function cleanupJsonpScript_(callbackName, script) {
   if (script && script.parentNode) script.parentNode.removeChild(script);
 }
 
-// ---- Render job cards ----
-function renderBoard(jobs) {
-  renderTracker(5, 5 - jobs.length);
+// ---- Render all cards in the current batch ----
+function renderBoard() {
+  updateTracker();
 
-  if (jobs.length === 0) {
+  if (currentJobs.length === 0) {
     board.innerHTML = `<div class="state-message">All done for now — check back for the next batch.</div>`;
     return;
   }
 
   board.innerHTML = '';
-  jobs.forEach(job => board.appendChild(buildCard(job)));
+  currentJobs.forEach(job => board.appendChild(buildCard(job)));
 }
 
 function buildCard(job) {
   const card = document.createElement('div');
-  card.className = 'job-card';
+  const state = jobStates[job.JobID];
+  card.className = 'job-card' + (state !== 'pending' ? ` state-${state}` : '');
   card.dataset.jobId = job.JobID;
 
   const isTruncated = String(job.DescriptionTruncated).toLowerCase() === 'true';
@@ -81,7 +92,14 @@ function buildCard(job) {
     ? `<a class="btn btn-secondary" href="${job.CoverLetterPdfUrl}" target="_blank" rel="noopener">Cover Letter</a>`
     : `<span class="btn btn-secondary" style="opacity:.5;cursor:default;">Cover Letter (preparing…)</span>`;
 
+  const statusBadge = state === 'completed'
+    ? `<div class="status-badge badge-completed">✓ Applied</div>`
+    : state === 'skipped'
+      ? `<div class="status-badge badge-skipped">Skipped${job._skipReason ? ' — ' + escapeHtml(job._skipReason) : ''}</div>`
+      : '';
+
   card.innerHTML = `
+    ${statusBadge}
     <div class="job-eyebrow">${escapeHtml(job.Company || 'Unknown company')}</div>
     <h2 class="job-title">${escapeHtml(job.Title || 'Untitled role')}</h2>
     <div class="job-meta">${escapeHtml(job.Location || '')}</div>
@@ -94,6 +112,10 @@ function buildCard(job) {
       ${coverBtn}
       <button class="btn btn-ghost skip-btn">Skip</button>
     </div>
+    <label class="complete-check">
+      <input type="checkbox" class="complete-checkbox">
+      Mark as completed
+    </label>
   `;
 
   // Expand/collapse full description
@@ -104,14 +126,22 @@ function buildCard(job) {
     toggleBtn.textContent = descEl.classList.contains('expanded') ? 'Show less' : 'Read full description';
   });
 
-  // Apply — record the action once they actually click through
-  card.querySelector('.apply-btn').addEventListener('click', () => {
-    sendAction(job.JobID, 'apply', '');
-    removeCard(card);
+  // Apply is just a plain link now — no side effects. Progress is only
+  // recorded when you come back and check the box yourself.
+  const completeCheckbox = card.querySelector('.complete-checkbox');
+  if (state === 'completed') completeCheckbox.checked = true;
+  if (state !== 'pending') completeCheckbox.disabled = true;
+
+  completeCheckbox.addEventListener('change', () => {
+    if (completeCheckbox.checked) {
+      sendAction(job.JobID, 'apply', '');
+      markJobState(job.JobID, 'completed');
+    }
   });
 
   // Skip — open the reason picker
   card.querySelector('.skip-btn').addEventListener('click', () => {
+    if (jobStates[job.JobID] !== 'pending') return;
     pendingSkipJobId = job.JobID;
     reasonOverlay.hidden = false;
   });
@@ -131,21 +161,22 @@ document.querySelectorAll('.chip').forEach(chip => {
     const reason = chip.dataset.reason;
     try {
       if (pendingSkipJobId) {
+        const job = currentJobs.find(j => j.JobID === pendingSkipJobId);
+        if (job) job._skipReason = reason;
         sendAction(pendingSkipJobId, 'skip', reason);
-        const card = board.querySelector(`[data-job-id="${pendingSkipJobId}"]`);
-        if (card) removeCard(card);
+        markJobState(pendingSkipJobId, 'skipped');
       }
     } catch (err) {
       console.error('Skip action failed:', err);
     } finally {
-      closeReasonOverlay(); // always closes, even if something above throws
+      closeReasonOverlay();
     }
   });
 });
 
 reasonCancel.addEventListener('click', closeReasonOverlay);
 
-// Clicking the dark backdrop itself (not the panel) also closes it, as a fallback
+// Clicking the dark backdrop itself also closes it, as a fallback
 reasonOverlay.addEventListener('click', (e) => {
   if (e.target === reasonOverlay) closeReasonOverlay();
 });
@@ -155,16 +186,28 @@ function closeReasonOverlay() {
   pendingSkipJobId = null;
 }
 
-// ---- Remove a card from view, then refresh from the server ----
-function removeCard(card) {
-  card.classList.add('removing');
-  setTimeout(() => {
-    card.remove();
-    fetchJobs(); // server is the source of truth — re-sync (handles batch refill too)
-  }, 300);
+// ---- Mark a card's state locally, re-render just that card, check if the batch is done ----
+function markJobState(jobId, state) {
+  jobStates[jobId] = state;
+  const job = currentJobs.find(j => j.JobID === jobId);
+  const oldCard = board.querySelector(`[data-job-id="${jobId}"]`);
+  if (job && oldCard) {
+    const newCard = buildCard(job);
+    oldCard.replaceWith(newCard);
+  }
+  updateTracker();
+  checkBatchComplete();
 }
 
-// ---- Send apply/skip action to the backend (also via JSONP, same reason as above) ----
+// ---- Once every card in view is completed or skipped, load the next batch ----
+function checkBatchComplete() {
+  const allDone = currentJobs.length > 0 && currentJobs.every(j => jobStates[j.JobID] !== 'pending');
+  if (allDone) {
+    setTimeout(fetchJobs, 1200); // brief pause so the final checkmark/badge is visible first
+  }
+}
+
+// ---- Send apply/skip action to the backend (via JSONP — see note in Code.gs) ----
 function sendAction(jobId, action, reason) {
   const callbackName = 'actionCallback_' + Date.now();
   window[callbackName] = function () {
