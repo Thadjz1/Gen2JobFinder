@@ -163,6 +163,20 @@ body {
   font-size: 14px;
   color: var(--ink-soft);
   margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.source-tag {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-brown);
+  background: #FAF3E8;
+  padding: 2px 8px;
+  border-radius: 999px;
 }
 
 .meta-row {
@@ -184,6 +198,7 @@ body {
   max-height: 3.2em;
   overflow: hidden;
   position: relative;
+  white-space: pre-wrap;
 }
 .job-description.expanded { max-height: none; }
 
