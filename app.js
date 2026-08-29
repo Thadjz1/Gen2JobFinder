@@ -1,352 +1,252 @@
-:root {
-  --bg: #F6F3EF;
-  --surface: #FFFFFF;
-  --ink: #37312C;
-  --ink-soft: #7A7168;
-  --accent-blue: #6E8CA0;
-  --accent-blue-deep: #56718334;
-  --accent-brown: #C4A576;
-  --hairline: #E4DDD3;
-  --danger: #B5654F;
-  --radius: 14px;
+// ============================================================
+// CONFIG — your deployed Apps Script Web App URL
+// ============================================================
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzG74xFfSUfgcQt4VuMNnp84HjUptvYGVadgop0efzHaVhcODafcq92m1pbvnJ6oOk/exec';
+
+const board = document.getElementById('board');
+const batchTracker = document.getElementById('batchTracker');
+const reasonOverlay = document.getElementById('reasonOverlay');
+const reasonCancel = document.getElementById('reasonCancel');
+
+let pendingSkipJobId = null;
+let currentJobs = [];   // the batch currently on screen
+let jobStates = {};     // jobId -> 'pending' | 'completed' | 'skipped'
+
+// ---- Batch progress tracker (cups fill in as cards get completed/skipped) ----
+function renderTracker(totalSlots, filledCount) {
+  batchTracker.innerHTML = '';
+  for (let i = 0; i < totalSlots; i++) {
+    const cup = document.createElement('div');
+    cup.className = 'cup' + (i < filledCount ? ' filled' : '');
+    cup.innerHTML = `
+      <svg viewBox="0 0 24 24">
+        <clipPath id="clip${i}"><rect x="4" y="8" width="16" height="12" rx="2"/></clipPath>
+        <rect class="cup-fill" x="4" y="8" width="16" height="12" clip-path="url(#clip${i})"/>
+        <path class="cup-outline" d="M5 8h14v9a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V8z"/>
+        <path class="cup-outline" d="M19 10h1.5a2 2 0 0 1 0 4H19"/>
+      </svg>`;
+    batchTracker.appendChild(cup);
+  }
 }
 
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--ink);
-  font-family: 'Inter', -apple-system, sans-serif;
-  -webkit-font-smoothing: antialiased;
+function updateTracker() {
+  const doneCount = currentJobs.filter(j => jobStates[j.JobID] !== 'pending').length;
+  renderTracker(Math.max(currentJobs.length, 1), doneCount);
 }
 
-.site-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 28px clamp(20px, 5vw, 64px) 20px;
-  border-bottom: 1px solid var(--hairline);
+// ---- Fetch current batch from the backend (via JSONP — see note in Code.gs) ----
+function fetchJobs() {
+  board.innerHTML = `<div class="state-message">Brewing today's batch…</div>`;
+  const callbackName = 'jobsCallback_' + Date.now();
+  window[callbackName] = function (data) {
+    currentJobs = data.jobs || [];
+    jobStates = {};
+    currentJobs.forEach(j => { jobStates[j.JobID] = 'pending'; });
+    renderBoard();
+    cleanupJsonpScript_(callbackName, script);
+  };
+
+  const script = document.createElement('script');
+  script.src = `${WEB_APP_URL}?callback=${callbackName}`;
+  script.onerror = () => {
+    board.innerHTML = `<div class="state-message">Couldn't load today's batch. Check back shortly.</div>`;
+    cleanupJsonpScript_(callbackName, script);
+  };
+  document.body.appendChild(script);
 }
 
-.wordmark {
-  font-family: 'Fraunces', serif;
-  font-weight: 500;
-  font-size: 22px;
-  letter-spacing: -0.01em;
-}
-.wordmark span { color: var(--accent-blue); }
-
-/* ---- Batch progress: the signature element ---- */
-.batch-tracker {
-  display: flex;
-  gap: 8px;
+function cleanupJsonpScript_(callbackName, script) {
+  delete window[callbackName];
+  if (script && script.parentNode) script.parentNode.removeChild(script);
 }
 
-.cup {
-  width: 22px;
-  height: 22px;
-  position: relative;
-}
-.cup svg { width: 100%; height: 100%; display: block; }
-.cup .cup-outline { stroke: var(--ink-soft); stroke-width: 1.6; fill: none; }
-.cup .cup-fill {
-  fill: var(--accent-brown);
-  transform-origin: bottom;
-  transform: scaleY(0);
-  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.cup.filled .cup-fill { transform: scaleY(1); }
-.cup.filled .cup-outline { stroke: var(--accent-blue); }
+// ---- Render all cards in the current batch ----
+function renderBoard() {
+  updateTracker();
 
-/* ---- Board / layout ---- */
-.board {
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 32px clamp(16px, 5vw, 24px) 100px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+  if (currentJobs.length === 0) {
+    board.innerHTML = `<div class="state-message">All done for now — check back for the next batch.</div>`;
+    return;
+  }
+
+  board.innerHTML = '';
+  currentJobs.forEach(job => board.appendChild(buildCard(job)));
 }
 
-.state-message {
-  text-align: center;
-  color: var(--ink-soft);
-  font-family: 'Fraunces', serif;
-  font-size: 20px;
-  padding: 80px 20px;
+function buildCard(job) {
+  const card = document.createElement('div');
+  const state = jobStates[job.JobID];
+  card.className = 'job-card' + (state !== 'pending' ? ` state-${state}` : '');
+  card.dataset.jobId = job.JobID;
+
+  const isTruncated = String(job.DescriptionTruncated).toLowerCase() === 'true';
+  const excerptNote = isTruncated
+    ? `<p class="excerpt-note">This may be an excerpt — <a href="${job.ApplyURL}" target="_blank" rel="noopener">view the full posting</a>.</p>`
+    : '';
+
+  const scoreLabel = job.Score ? `<span class="match-score">${escapeHtml(String(job.Score))}% match</span>` : '';
+  const salaryLabel = job.SalaryRange ? ` (${escapeHtml(job.SalaryRange)})` : '';
+  const dateLabel = formatDate_(job.PostedDate);
+
+  const resumeBtn = job.ResumePdfUrl
+    ? `<a class="btn btn-secondary" href="${job.ResumePdfUrl}" target="_blank" rel="noopener">Download Resume</a>`
+    : `<span class="btn btn-secondary" style="opacity:.5;cursor:default;">Preparing…</span>`;
+
+  const coverBtn = job.CoverLetterPdfUrl
+    ? `<a class="btn btn-secondary" href="${job.CoverLetterPdfUrl}" target="_blank" rel="noopener">Draft Cover Letter</a>`
+    : `<span class="btn btn-secondary" style="opacity:.5;cursor:default;">Preparing…</span>`;
+
+  const statusBadge = state === 'completed'
+    ? `<div class="status-badge badge-completed">✓ Applied</div>`
+    : state === 'skipped'
+      ? `<div class="status-badge badge-skipped">Skipped${job._skipReason ? ' — ' + escapeHtml(job._skipReason) : ''}</div>`
+      : '';
+
+  card.innerHTML = `
+    ${statusBadge}
+    <div class="card-row title-row">
+      <h2 class="job-title">${escapeHtml(job.Title || 'Untitled role')}</h2>
+      ${scoreLabel}
+    </div>
+    <div class="job-company">Company Name: ${escapeHtml(job.Company || 'Unknown')} <span class="source-tag">${escapeHtml(formatSource_(job.Source))}</span></div>
+    <div class="card-row meta-row">
+      <span>${escapeHtml(job.Location || 'Location not listed')}${salaryLabel}</span>
+      <span class="meta-date">${dateLabel}</span>
+    </div>
+    <div class="job-description">${escapeHtml(job.FullDescription || 'No description available.')}</div>
+    <button class="desc-toggle">Read more</button>
+    ${excerptNote}
+    <div class="card-row resume-row">
+      <span class="resume-label">Tailored from your master resume</span>
+      ${resumeBtn}
+    </div>
+    <div class="card-row action-row">
+      ${coverBtn}
+      <a class="btn btn-primary apply-btn" href="${job.ApplyURL}" target="_blank" rel="noopener">Apply</a>
+      <button class="btn btn-ghost skip-btn">Skip</button>
+    </div>
+    <label class="complete-check">
+      <input type="checkbox" class="complete-checkbox">
+      Mark as completed
+    </label>
+  `;
+
+  // Expand/collapse full description
+  const descEl = card.querySelector('.job-description');
+  const toggleBtn = card.querySelector('.desc-toggle');
+  toggleBtn.addEventListener('click', () => {
+    descEl.classList.toggle('expanded');
+    toggleBtn.textContent = descEl.classList.contains('expanded') ? 'Show less' : 'Read more';
+  });
+
+  // Apply is just a plain link now — no side effects. Progress is only
+  // recorded when you come back and check the box yourself.
+  const completeCheckbox = card.querySelector('.complete-checkbox');
+  if (state === 'completed') completeCheckbox.checked = true;
+  if (state !== 'pending') completeCheckbox.disabled = true;
+
+  completeCheckbox.addEventListener('change', () => {
+    if (completeCheckbox.checked) {
+      sendAction(job.JobID, 'apply', '');
+      markJobState(job.JobID, 'completed');
+    }
+  });
+
+  // Skip — open the reason picker
+  card.querySelector('.skip-btn').addEventListener('click', () => {
+    if (jobStates[job.JobID] !== 'pending') return;
+    pendingSkipJobId = job.JobID;
+    reasonOverlay.hidden = false;
+  });
+
+  return card;
 }
 
-/* ---- Job card ---- */
-.job-card {
-  background: var(--surface);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius);
-  padding: 24px clamp(18px, 4vw, 28px);
-  position: relative;
-  transition: opacity 0.3s ease, background 0.3s ease;
+function formatDate_(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-.job-card.state-completed {
-  border-color: var(--accent-blue);
-  background: #F3F7F9;
-}
-.job-card.state-skipped {
-  opacity: 0.55;
+function formatSource_(source) {
+  const names = { greenhouse: 'Greenhouse', lever: 'Lever', ashby: 'Ashby', adzuna: 'Adzuna' };
+  return names[(source || '').toLowerCase()] || source || 'Unknown source';
 }
 
-.status-badge {
-  display: inline-block;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  padding: 4px 10px;
-  border-radius: 999px;
-  margin-bottom: 10px;
-}
-.badge-completed {
-  background: var(--accent-blue);
-  color: #fff;
-}
-.badge-skipped {
-  background: var(--hairline);
-  color: var(--ink-soft);
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }
 
-.complete-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 14px;
-  font-size: 13px;
-  color: var(--ink-soft);
-  cursor: pointer;
-  user-select: none;
-}
-.complete-check input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent-blue);
-  cursor: pointer;
-}
-.complete-check input:disabled {
-  cursor: default;
+// ---- Skip reason picker ----
+document.querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const reason = chip.dataset.reason;
+    try {
+      if (pendingSkipJobId) {
+        const job = currentJobs.find(j => j.JobID === pendingSkipJobId);
+        if (job) job._skipReason = reason;
+        sendAction(pendingSkipJobId, 'skip', reason);
+        markJobState(pendingSkipJobId, 'skipped');
+      }
+    } catch (err) {
+      console.error('Skip action failed:', err);
+    } finally {
+      closeReasonOverlay();
+    }
+  });
+});
+
+reasonCancel.addEventListener('click', closeReasonOverlay);
+
+// Clicking the dark backdrop itself also closes it, as a fallback
+reasonOverlay.addEventListener('click', (e) => {
+  if (e.target === reasonOverlay) closeReasonOverlay();
+});
+
+function closeReasonOverlay() {
+  reasonOverlay.hidden = true;
+  pendingSkipJobId = null;
 }
 
-.card-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
+// ---- Mark a card's state locally, re-render just that card, check if the batch is done ----
+function markJobState(jobId, state) {
+  jobStates[jobId] = state;
+  const job = currentJobs.find(j => j.JobID === jobId);
+  const oldCard = board.querySelector(`[data-job-id="${jobId}"]`);
+  if (job && oldCard) {
+    const newCard = buildCard(job);
+    oldCard.replaceWith(newCard);
+  }
+  updateTracker();
+  checkBatchComplete();
 }
 
-.title-row {
-  margin-bottom: 4px;
+// ---- Once every card in view is completed or skipped, load the next batch ----
+function checkBatchComplete() {
+  const allDone = currentJobs.length > 0 && currentJobs.every(j => jobStates[j.JobID] !== 'pending');
+  if (allDone) {
+    setTimeout(fetchJobs, 1200); // brief pause so the final checkmark/badge is visible first
+  }
 }
 
-.job-title {
-  font-family: 'Fraunces', serif;
-  font-size: 20px;
-  font-weight: 500;
-  margin: 0;
+// ---- Send apply/skip action to the backend (via JSONP — see note in Code.gs) ----
+function sendAction(jobId, action, reason) {
+  const callbackName = 'actionCallback_' + Date.now();
+  window[callbackName] = function () {
+    cleanupJsonpScript_(callbackName, script);
+  };
+
+  const params = new URLSearchParams({ action, jobId, reason: reason || '', callback: callbackName });
+  const script = document.createElement('script');
+  script.src = `${WEB_APP_URL}?${params.toString()}`;
+  script.onerror = () => {
+    console.error('Failed to record action for job', jobId);
+    cleanupJsonpScript_(callbackName, script);
+  };
+  document.body.appendChild(script);
 }
 
-.match-score {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 12px;
-  color: var(--accent-blue);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.job-company {
-  font-size: 14px;
-  color: var(--ink-soft);
-  margin-bottom: 6px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.source-tag {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--accent-brown);
-  background: #FAF3E8;
-  padding: 2px 8px;
-  border-radius: 999px;
-}
-
-.meta-row {
-  font-size: 13px;
-  color: var(--ink-soft);
-  margin-bottom: 14px;
-}
-
-.meta-date {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11.5px;
-  white-space: nowrap;
-}
-
-.job-description {
-  font-size: 14.5px;
-  line-height: 1.6;
-  color: var(--ink);
-  max-height: 3.2em;
-  overflow: hidden;
-  position: relative;
-  white-space: pre-wrap;
-}
-.job-description.expanded { max-height: none; }
-
-.resume-row {
-  align-items: center;
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid var(--hairline);
-}
-
-.resume-label {
-  font-size: 13px;
-  color: var(--ink-soft);
-}
-
-.action-row {
-  margin-top: 12px;
-  align-items: center;
-}
-.action-row .apply-btn {
-  flex: 1;
-  justify-content: center;
-  text-align: center;
-}
-.action-row .btn-ghost {
-  margin-left: 0;
-}
-
-.desc-toggle {
-  background: none;
-  border: none;
-  color: var(--accent-blue);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 8px 0 0;
-  font-family: 'Inter', sans-serif;
-}
-
-.excerpt-note {
-  font-size: 12.5px;
-  color: var(--ink-soft);
-  margin-top: 6px;
-}
-.excerpt-note a { color: var(--accent-blue); }
-
-.job-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 20px;
-}
-
-.btn {
-  font-family: 'Inter', sans-serif;
-  font-size: 13.5px;
-  font-weight: 600;
-  padding: 10px 16px;
-  border-radius: 9px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.btn-primary {
-  background: var(--accent-blue);
-  color: #fff;
-}
-.btn-primary:hover { background: #5f7c8e; }
-
-.btn-secondary {
-  background: #fff;
-  border-color: var(--hairline);
-  color: var(--ink);
-}
-.btn-secondary:hover { border-color: var(--accent-brown); }
-
-.btn-ghost {
-  background: none;
-  color: var(--ink-soft);
-  margin-left: auto;
-}
-.btn-ghost:hover { color: var(--danger); }
-
-/* ---- Skip reason overlay ---- */
-.reason-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(55, 49, 44, 0.35);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  z-index: 10;
-}
-.reason-overlay[hidden] {
-  display: none;
-}
-@media (min-width: 640px) {
-  .reason-overlay { align-items: center; }
-}
-
-.reason-panel {
-  background: var(--surface);
-  border-radius: 18px 18px 0 0;
-  padding: 24px;
-  width: 100%;
-  max-width: 420px;
-}
-@media (min-width: 640px) {
-  .reason-panel { border-radius: 16px; }
-}
-
-.reason-title {
-  font-family: 'Fraunces', serif;
-  font-size: 18px;
-  margin: 0 0 14px;
-}
-
-.reason-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.chip {
-  font-family: 'Inter', sans-serif;
-  font-size: 13px;
-  padding: 9px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--hairline);
-  background: var(--bg);
-  cursor: pointer;
-  color: var(--ink);
-}
-.chip:hover {
-  border-color: var(--accent-blue);
-  color: var(--accent-blue);
-}
-
-.reason-cancel {
-  background: none;
-  border: none;
-  color: var(--ink-soft);
-  font-size: 13px;
-  cursor: pointer;
-  padding: 0;
-}
+fetchJobs();
