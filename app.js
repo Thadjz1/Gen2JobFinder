@@ -2,7 +2,7 @@
 // CONFIG — paste your deployed Apps Script Web App URL here
 // (Deploy > New deployment > Web app > copy the URL ending in /exec)
 // ============================================================
-const WEB_APP_URL = 'PASTE_YOUR_WEB_APP_URL_HERE';
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzG74xFfSUfgcQt4VuMNnp84HjUptvYGVadgop0efzHaVhcODafcq92m1pbvnJ6oOk/exec';
 
 const board = document.getElementById('board');
 const batchTracker = document.getElementById('batchTracker');
