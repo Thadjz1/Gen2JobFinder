@@ -1,7 +1,7 @@
 // ============================================================
 // CONFIG — your deployed Apps Script Web App URL
 // ============================================================
-const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzG74xFfSUfgcQt4VuMNnp84HjUptvYGVadgop0efzHaVhcODafcq92m1pbvnJ6oOk/exec';
+const WEB_APP_URL = 'PASTE_YOUR_WEB_APP_URL_HERE';
 
 const board = document.getElementById('board');
 const batchTracker = document.getElementById('batchTracker');
@@ -108,7 +108,7 @@ function buildCard(job) {
       <h2 class="job-title">${escapeHtml(job.Title || 'Untitled role')}</h2>
       ${scoreLabel}
     </div>
-    <div class="job-company">Company Name: ${escapeHtml(job.Company || 'Unknown')}</div>
+    <div class="job-company">Company Name: ${escapeHtml(job.Company || 'Unknown')} <span class="source-tag">${escapeHtml(formatSource_(job.Source))}</span></div>
     <div class="card-row meta-row">
       <span>${escapeHtml(job.Location || 'Location not listed')}${salaryLabel}</span>
       <span class="meta-date">${dateLabel}</span>
@@ -167,6 +167,11 @@ function formatDate_(dateStr) {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return '';
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatSource_(source) {
+  const names = { greenhouse: 'Greenhouse', lever: 'Lever', ashby: 'Ashby', adzuna: 'Adzuna' };
+  return names[(source || '').toLowerCase()] || source || 'Unknown source';
 }
 
 function escapeHtml(str) {
