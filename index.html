@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gen2JobFinder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wordmark">Gen2<span>JobFinder</span></div>
+
+  <div class="batch-tracker" id="batchTracker" aria-label="Today's batch progress">
+    <!-- 5 cup icons injected by app.js -->
+  </div>
+</header>
+
+<main class="board" id="board">
+  <div class="state-message" id="loadingMessage">Brewing today's batch…</div>
+</main>
+
+<!-- Skip reason picker, shown as an inline panel over the card that triggered it -->
+<div class="reason-overlay" id="reasonOverlay" hidden>
+  <div class="reason-panel">
+    <p class="reason-title">Why skip this one?</p>
+    <div class="reason-chips">
+      <button class="chip" data-reason="Wrong industry">Wrong industry</button>
+      <button class="chip" data-reason="Too senior/junior">Too senior/junior</button>
+      <button class="chip" data-reason="Bad culture fit">Bad culture fit</button>
+      <button class="chip" data-reason="Comp/location mismatch">Comp/location mismatch</button>
+      <button class="chip" data-reason="Not mission-aligned">Not mission-aligned</button>
+      <button class="chip" data-reason="Other">Other</button>
+    </div>
+    <button class="reason-cancel" id="reasonCancel">Cancel</button>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
