@@ -2,7 +2,7 @@
 // CONFIG — paste your deployed Apps Script Web App URL here
 // (Deploy > New deployment > Web app > copy the URL ending in /exec)
 // ============================================================
-const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzG74xFfSUfgcQt4VuMNnp84HjUptvYGVadgop0efzHaVhcODafcq92m1pbvnJ6oOk/exec';
+const WEB_APP_URL = 'PASTE_YOUR_WEB_APP_URL_HERE';
 
 const board = document.getElementById('board');
 const batchTracker = document.getElementById('batchTracker');
@@ -119,16 +119,26 @@ function escapeHtml(str) {
 document.querySelectorAll('.chip').forEach(chip => {
   chip.addEventListener('click', () => {
     const reason = chip.dataset.reason;
-    if (pendingSkipJobId) {
-      sendAction(pendingSkipJobId, 'skip', reason);
-      const card = board.querySelector(`[data-job-id="${pendingSkipJobId}"]`);
-      if (card) removeCard(card);
+    try {
+      if (pendingSkipJobId) {
+        sendAction(pendingSkipJobId, 'skip', reason);
+        const card = board.querySelector(`[data-job-id="${pendingSkipJobId}"]`);
+        if (card) removeCard(card);
+      }
+    } catch (err) {
+      console.error('Skip action failed:', err);
+    } finally {
+      closeReasonOverlay(); // always closes, even if something above throws
     }
-    closeReasonOverlay();
   });
 });
 
 reasonCancel.addEventListener('click', closeReasonOverlay);
+
+// Clicking the dark backdrop itself (not the panel) also closes it, as a fallback
+reasonOverlay.addEventListener('click', (e) => {
+  if (e.target === reasonOverlay) closeReasonOverlay();
+});
 
 function closeReasonOverlay() {
   reasonOverlay.hidden = true;
