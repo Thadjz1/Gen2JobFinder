@@ -1,11 +1,13 @@
 :root {
-  --bg: #E7E8E9;
+  --bg: #2A2927;
+  --page-ink: #EDE7DC;
   --surface: #FAF5EC;
   --ink: #37312C;
   --ink-soft: #7A7168;
   --accent-blue: #6E8CA0;
   --accent-blue-deep: #56718334;
   --accent-brown: #C4A576;
+  --mug-brown: #9C7B54;
   --hairline: #E4DDD3;
   --danger: #B5654F;
   --radius: 14px;
@@ -26,7 +28,7 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 28px clamp(20px, 5vw, 64px) 20px;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .wordmark {
@@ -34,8 +36,8 @@ body {
   font-weight: 500;
   font-size: 22px;
   letter-spacing: -0.01em;
+  color: var(--page-ink);
 }
-.wordmark span { color: var(--accent-blue); }
 
 /* ---- Batch progress: the signature element ---- */
 .batch-tracker {
@@ -49,14 +51,14 @@ body {
   position: relative;
 }
 .cup svg { width: 100%; height: 100%; display: block; }
-.cup .cup-outline { stroke: var(--ink-soft); stroke-width: 1.6; fill: none; }
+.cup .cup-outline { stroke: var(--mug-brown); stroke-width: 1.6; fill: none; transition: stroke 0.4s ease; }
 .cup .cup-fill {
-  fill: var(--accent-brown);
+  fill: var(--mug-brown);
+  transform: scaleY(1);
   transform-origin: bottom;
-  transform: scaleY(0);
-  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: fill 0.4s ease;
 }
-.cup.filled .cup-fill { fill: var(--accent-blue); transform: scaleY(1); }
+.cup.filled .cup-fill { fill: var(--accent-blue); }
 .cup.filled .cup-outline { stroke: var(--accent-blue); }
 
 /* ---- Board / layout ---- */
@@ -71,10 +73,11 @@ body {
 
 .state-message {
   text-align: center;
-  color: var(--ink-soft);
+  color: var(--page-ink);
   font-family: 'Fraunces', serif;
   font-size: 20px;
   padding: 80px 20px;
+  opacity: 0.85;
 }
 
 /* ---- Job card ---- */
@@ -84,11 +87,11 @@ body {
   border-radius: var(--radius);
   padding: 24px clamp(18px, 4vw, 28px);
   position: relative;
-  box-shadow: 0 6px 20px rgba(55, 49, 44, 0.09), 0 1px 4px rgba(55, 49, 44, 0.06);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.25);
   transition: opacity 0.3s ease, background 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
 }
 .job-card:hover {
-  box-shadow: 0 10px 28px rgba(55, 49, 44, 0.12), 0 2px 6px rgba(55, 49, 44, 0.07);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4), 0 3px 8px rgba(0, 0, 0, 0.28);
   transform: translateY(-1px);
 }
 
