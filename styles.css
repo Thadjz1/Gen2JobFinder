@@ -369,16 +369,16 @@ body {
 .deco-plant svg { display: block; }
 
 .deco-plant-bottom-left {
-  bottom: -20px;
-  left: -20px;
-  width: 180px;
+  bottom: -15px;
+  left: -15px;
+  width: 200px;
   height: auto;
 }
 
 .deco-plant-bottom-right {
-  bottom: -20px;
-  right: -20px;
-  width: 170px;
+  bottom: -15px;
+  right: -15px;
+  width: 190px;
   height: auto;
 }
 
