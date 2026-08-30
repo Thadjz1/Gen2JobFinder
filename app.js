@@ -312,23 +312,47 @@ function escapeHtml(str) {
 }
 
 // ---- Skip reason picker ----
+const otherReasonWrap = document.getElementById('otherReasonWrap');
+const otherReasonText = document.getElementById('otherReasonText');
+const otherReasonSubmit = document.getElementById('otherReasonSubmit');
+
 document.querySelectorAll('.chip').forEach(chip => {
   chip.addEventListener('click', () => {
-    const reason = chip.dataset.reason;
-    try {
-      if (pendingSkipJobId) {
-        const job = currentJobs.find(j => j.JobID === pendingSkipJobId);
-        if (job) job._skipReason = reason;
-        sendAction(pendingSkipJobId, 'skip', reason);
-        markJobState(pendingSkipJobId, 'skipped');
-      }
-    } catch (err) {
-      console.error('Skip action failed:', err);
-    } finally {
-      closeReasonOverlay();
+    if (chip.dataset.reason === 'Other') {
+      // Reveal the text box instead of submitting immediately — the actual
+      // reason gets captured on explicit submit below.
+      otherReasonWrap.hidden = false;
+      otherReasonText.value = '';
+      otherReasonText.focus();
+      return;
     }
+    submitSkip_(chip.dataset.reason);
   });
 });
+
+otherReasonSubmit.addEventListener('click', () => {
+  const customReason = otherReasonText.value.trim();
+  if (!customReason) {
+    otherReasonText.focus();
+    return;
+  }
+  submitSkip_(customReason);
+});
+
+function submitSkip_(reason) {
+  try {
+    if (pendingSkipJobId) {
+      const job = currentJobs.find(j => j.JobID === pendingSkipJobId);
+      if (job) job._skipReason = reason;
+      sendAction(pendingSkipJobId, 'skip', reason);
+      markJobState(pendingSkipJobId, 'skipped');
+    }
+  } catch (err) {
+    console.error('Skip action failed:', err);
+  } finally {
+    closeReasonOverlay();
+  }
+}
 
 reasonCancel.addEventListener('click', closeReasonOverlay);
 
@@ -339,6 +363,8 @@ reasonOverlay.addEventListener('click', (e) => {
 function closeReasonOverlay() {
   reasonOverlay.hidden = true;
   pendingSkipJobId = null;
+  otherReasonWrap.hidden = true;
+  otherReasonText.value = '';
 }
 
 // ---- Mark a card's state locally, re-render just that card, check if the batch is done ----
