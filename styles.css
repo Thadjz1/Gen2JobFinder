@@ -384,7 +384,7 @@ body {
 }
 
 /* Keep real content above the decorative plants */
-.site-header, .board, .reason-overlay {
+.site-header, .board {
   position: relative;
   z-index: 1;
 }
