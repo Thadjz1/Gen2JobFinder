@@ -351,6 +351,30 @@ body {
   padding: 0;
 }
 
+.other-reason-wrap {
+  margin-top: -4px;
+  margin-bottom: 16px;
+}
+
+.other-reason-input {
+  width: 100%;
+  min-height: 70px;
+  resize: vertical;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13.5px;
+  color: var(--ink);
+  background: var(--bg);
+  box-sizing: border-box;
+  margin-bottom: 10px;
+}
+.other-reason-input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
 /* ---- Cover letter editor panel ---- */
 .cover-editor {
   margin-top: 14px;
