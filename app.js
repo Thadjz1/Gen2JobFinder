@@ -11,6 +11,8 @@ const reasonCancel = document.getElementById('reasonCancel');
 let pendingSkipJobId = null;
 let currentJobs = [];   // the batch currently on screen
 let jobStates = {};     // jobId -> 'pending' | 'completed' | 'skipped'
+let openCoverLetterJobId = null; // which card (if any) has its editor panel expanded
+const autosaveTimers = {}; // jobId -> debounce timer handle
 
 // ---- Batch progress tracker (cups fill in as cards get completed/skipped) ----
 function renderTracker(totalSlots, filledCount) {
@@ -42,6 +44,7 @@ function fetchJobs() {
     currentJobs = data.jobs || [];
     jobStates = {};
     currentJobs.forEach(j => { jobStates[j.JobID] = 'pending'; });
+    openCoverLetterJobId = null;
     renderBoard();
     cleanupJsonpScript_(callbackName, script);
   };
@@ -58,6 +61,24 @@ function fetchJobs() {
 function cleanupJsonpScript_(callbackName, script) {
   delete window[callbackName];
   if (script && script.parentNode) script.parentNode.removeChild(script);
+}
+
+// General-purpose JSONP call for actions that need a response back
+// (proofread/redraft/download), not just fire-and-forget like apply/skip.
+function callBackend_(params, onSuccess, onError) {
+  const callbackName = 'cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+  window[callbackName] = function (data) {
+    cleanupJsonpScript_(callbackName, script);
+    onSuccess(data);
+  };
+  const fullParams = new URLSearchParams(Object.assign({}, params, { callback: callbackName }));
+  const script = document.createElement('script');
+  script.src = `${WEB_APP_URL}?${fullParams.toString()}`;
+  script.onerror = () => {
+    cleanupJsonpScript_(callbackName, script);
+    if (onError) onError();
+  };
+  document.body.appendChild(script);
 }
 
 // ---- Render all cards in the current batch ----
@@ -92,15 +113,13 @@ function buildCard(job) {
     ? `<a class="btn btn-secondary" href="${job.ResumePdfUrl}" target="_blank" rel="noopener">Download Resume</a>`
     : `<span class="btn btn-secondary" style="opacity:.5;cursor:default;">Preparing…</span>`;
 
-  const coverBtn = job.CoverLetterPdfUrl
-    ? `<a class="btn btn-secondary" href="${job.CoverLetterPdfUrl}" target="_blank" rel="noopener">Draft Cover Letter</a>`
-    : `<span class="btn btn-secondary" style="opacity:.5;cursor:default;">Preparing…</span>`;
-
   const statusBadge = state === 'completed'
     ? `<div class="status-badge badge-completed">✓ Applied</div>`
     : state === 'skipped'
       ? `<div class="status-badge badge-skipped">Skipped${job._skipReason ? ' — ' + escapeHtml(job._skipReason) : ''}</div>`
       : '';
+
+  const isEditorOpen = openCoverLetterJobId === job.JobID;
 
   card.innerHTML = `
     ${statusBadge}
@@ -121,10 +140,11 @@ function buildCard(job) {
       ${resumeBtn}
     </div>
     <div class="card-row action-row">
-      ${coverBtn}
+      <button class="btn btn-secondary cover-toggle-btn">${isEditorOpen ? 'Hide Cover Letter' : 'Draft Cover Letter'}</button>
       <a class="btn btn-primary apply-btn" href="${job.ApplyURL}" target="_blank" rel="noopener">Apply</a>
       <button class="btn btn-ghost skip-btn">Skip</button>
     </div>
+    ${isEditorOpen ? buildCoverLetterEditorHtml_(job) : ''}
     <label class="complete-check">
       <input type="checkbox" class="complete-checkbox">
       Mark as completed
@@ -139,7 +159,7 @@ function buildCard(job) {
     toggleBtn.textContent = descEl.classList.contains('expanded') ? 'Show less' : 'Read more';
   });
 
-  // Apply is just a plain link now — no side effects. Progress is only
+  // Apply is just a plain link — no side effects. Progress is only
   // recorded when you come back and check the box yourself.
   const completeCheckbox = card.querySelector('.complete-checkbox');
   if (state === 'completed') completeCheckbox.checked = true;
@@ -159,7 +179,118 @@ function buildCard(job) {
     reasonOverlay.hidden = false;
   });
 
+  // Draft Cover Letter — toggle the inline editor panel
+  card.querySelector('.cover-toggle-btn').addEventListener('click', () => {
+    openCoverLetterJobId = isEditorOpen ? null : job.JobID;
+    const newCard = buildCard(job);
+    card.replaceWith(newCard);
+  });
+
+  if (isEditorOpen) wireCoverLetterEditor_(card, job);
+
   return card;
+}
+
+// ---- Cover letter editor panel ----
+function buildCoverLetterEditorHtml_(job) {
+  const text = job.CoverLetterText || '';
+  return `
+    <div class="cover-editor">
+      <textarea class="cover-textarea" placeholder="Generating your draft…">${escapeHtml(text)}</textarea>
+      <div class="cover-editor-footer">
+        <span class="save-status" data-state="idle">Saved</span>
+        <div class="cover-editor-buttons">
+          <button class="btn btn-secondary proof-btn">Proofread</button>
+          <button class="btn btn-secondary redraft-btn">Redraft</button>
+          <button class="btn btn-primary download-cover-btn">Download as PDF</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function wireCoverLetterEditor_(card, job) {
+  const textarea = card.querySelector('.cover-textarea');
+  const saveStatus = card.querySelector('.save-status');
+  const proofBtn = card.querySelector('.proof-btn');
+  const redraftBtn = card.querySelector('.redraft-btn');
+  const downloadBtn = card.querySelector('.download-cover-btn');
+
+  function setStatus(state, label) {
+    saveStatus.dataset.state = state;
+    saveStatus.textContent = label;
+  }
+
+  function setBusy(busy) {
+    [proofBtn, redraftBtn, downloadBtn].forEach(b => b.disabled = busy);
+    textarea.disabled = busy;
+  }
+
+  // Autosave — debounced so it doesn't fire on every keystroke
+  textarea.addEventListener('input', () => {
+    setStatus('unsaved', 'Unsaved changes…');
+    clearTimeout(autosaveTimers[job.JobID]);
+    autosaveTimers[job.JobID] = setTimeout(() => {
+      setStatus('saving', 'Saving…');
+      callBackend_(
+        { action: 'saveCoverLetterText', jobId: job.JobID, text: textarea.value },
+        () => {
+          job.CoverLetterText = textarea.value;
+          setStatus('idle', 'Saved');
+        },
+        () => setStatus('error', 'Save failed — will retry on next edit')
+      );
+    }, 1500);
+  });
+
+  proofBtn.addEventListener('click', () => {
+    setBusy(true);
+    setStatus('saving', 'Checking spelling & grammar…');
+    callBackend_(
+      { action: 'proofreadCoverLetter', jobId: job.JobID, text: textarea.value },
+      (data) => {
+        textarea.value = data.text || textarea.value;
+        job.CoverLetterText = textarea.value;
+        setBusy(false);
+        setStatus('idle', 'Saved');
+      },
+      () => { setBusy(false); setStatus('error', 'Proofread failed — try again'); }
+    );
+  });
+
+  redraftBtn.addEventListener('click', () => {
+    setBusy(true);
+    setStatus('saving', 'Drafting a fresh version…');
+    callBackend_(
+      { action: 'redraftCoverLetter', jobId: job.JobID },
+      (data) => {
+        textarea.value = data.text || textarea.value;
+        job.CoverLetterText = textarea.value;
+        setBusy(false);
+        setStatus('idle', 'Saved');
+      },
+      () => { setBusy(false); setStatus('error', 'Redraft failed — try again'); }
+    );
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    setBusy(true);
+    const originalLabel = downloadBtn.textContent;
+    downloadBtn.textContent = 'Preparing PDF…';
+    callBackend_(
+      { action: 'downloadCoverLetterPdf', jobId: job.JobID, text: textarea.value },
+      (data) => {
+        setBusy(false);
+        downloadBtn.textContent = originalLabel;
+        if (data.url) window.open(data.url, '_blank', 'noopener');
+      },
+      () => {
+        setBusy(false);
+        downloadBtn.textContent = originalLabel;
+        setStatus('error', 'PDF generation failed — try again');
+      }
+    );
+  });
 }
 
 function formatDate_(dateStr) {
@@ -201,7 +332,6 @@ document.querySelectorAll('.chip').forEach(chip => {
 
 reasonCancel.addEventListener('click', closeReasonOverlay);
 
-// Clicking the dark backdrop itself also closes it, as a fallback
 reasonOverlay.addEventListener('click', (e) => {
   if (e.target === reasonOverlay) closeReasonOverlay();
 });
@@ -232,21 +362,13 @@ function checkBatchComplete() {
   }
 }
 
-// ---- Send apply/skip action to the backend (via JSONP — see note in Code.gs) ----
+// ---- Send apply/skip action to the backend (fire-and-forget via JSONP) ----
 function sendAction(jobId, action, reason) {
-  const callbackName = 'actionCallback_' + Date.now();
-  window[callbackName] = function () {
-    cleanupJsonpScript_(callbackName, script);
-  };
-
-  const params = new URLSearchParams({ action, jobId, reason: reason || '', callback: callbackName });
-  const script = document.createElement('script');
-  script.src = `${WEB_APP_URL}?${params.toString()}`;
-  script.onerror = () => {
-    console.error('Failed to record action for job', jobId);
-    cleanupJsonpScript_(callbackName, script);
-  };
-  document.body.appendChild(script);
+  callBackend_(
+    { action: action, jobId: jobId, reason: reason || '' },
+    function () {},
+    function () { console.error('Failed to record action for job', jobId); }
+  );
 }
 
 fetchJobs();
