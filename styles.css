@@ -404,7 +404,7 @@ body {
   font-family: 'Inter', sans-serif;
   font-size: 13.5px;
   color: var(--ink);
-  background: var(--bg);
+  background: #F1EAE0;
   box-sizing: border-box;
   margin-bottom: 10px;
 }
