@@ -298,28 +298,23 @@ body {
 .reason-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
   z-index: 10;
 }
 .reason-overlay[hidden] {
   display: none;
 }
-@media (min-width: 640px) {
-  .reason-overlay { align-items: center; }
-}
 
 .reason-panel {
   background: var(--surface);
-  border-radius: 18px 18px 0 0;
+  border-radius: 16px;
   padding: 24px;
   width: 100%;
   max-width: 420px;
-}
-@media (min-width: 640px) {
-  .reason-panel { border-radius: 16px; }
+  margin: 20px;
 }
 
 .reason-title {
