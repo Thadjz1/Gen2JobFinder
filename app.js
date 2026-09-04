@@ -5,6 +5,7 @@ const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzG74xFfSUfgcQt4VuM
 
 const board = document.getElementById('board');
 const batchTracker = document.getElementById('batchTracker');
+const queueDepthEl = document.getElementById('queueDepth');
 const reasonOverlay = document.getElementById('reasonOverlay');
 const reasonCancel = document.getElementById('reasonCancel');
 
@@ -45,6 +46,7 @@ function fetchJobs() {
     jobStates = {};
     currentJobs.forEach(j => { jobStates[j.JobID] = 'pending'; });
     openCoverLetterJobId = null;
+    updateQueueDepth_(data.queueCount);
     renderBoard();
     cleanupJsonpScript_(callbackName, script);
   };
@@ -56,6 +58,14 @@ function fetchJobs() {
     cleanupJsonpScript_(callbackName, script);
   };
   document.body.appendChild(script);
+}
+
+function updateQueueDepth_(count) {
+  if (typeof count !== 'number') {
+    queueDepthEl.textContent = '';
+    return;
+  }
+  queueDepthEl.textContent = count === 1 ? '1 more waiting' : `${count} more waiting`;
 }
 
 function cleanupJsonpScript_(callbackName, script) {
