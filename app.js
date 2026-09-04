@@ -13,6 +13,7 @@ let pendingSkipJobId = null;
 let currentJobs = [];   // the batch currently on screen
 let jobStates = {};     // jobId -> 'pending' | 'completed' | 'skipped'
 let openCoverLetterJobId = null; // which card (if any) has its editor panel expanded
+let customSkipReasons = []; // learned reasons from past "Other" submissions
 const autosaveTimers = {}; // jobId -> debounce timer handle
 
 // ---- Batch progress tracker (cups fill in as cards get completed/skipped) ----
@@ -47,6 +48,8 @@ function fetchJobs() {
     currentJobs.forEach(j => { jobStates[j.JobID] = 'pending'; });
     openCoverLetterJobId = null;
     updateQueueDepth_(data.queueCount);
+    customSkipReasons = data.customReasons || [];
+    renderCustomReasonChips_();
     renderBoard();
     cleanupJsonpScript_(callbackName, script);
   };
@@ -325,19 +328,37 @@ function escapeHtml(str) {
 const otherReasonWrap = document.getElementById('otherReasonWrap');
 const otherReasonText = document.getElementById('otherReasonText');
 const otherReasonSubmit = document.getElementById('otherReasonSubmit');
+const reasonChipsContainer = document.querySelector('.reason-chips');
 
-document.querySelectorAll('.chip').forEach(chip => {
-  chip.addEventListener('click', () => {
-    if (chip.dataset.reason === 'Other') {
-      // Reveal the text box instead of submitting immediately — the actual
-      // reason gets captured on explicit submit below.
-      otherReasonWrap.hidden = false;
-      otherReasonText.value = '';
-      otherReasonText.focus();
-      return;
-    }
-    submitSkip_(chip.dataset.reason);
+// Learned reasons render as real chips, inserted right before "Other" so
+// that stays last. Uses event delegation on the container so newly-added
+// chips work without any extra wiring.
+function renderCustomReasonChips_() {
+  reasonChipsContainer.querySelectorAll('.chip-custom').forEach(el => el.remove());
+  const otherBtn = reasonChipsContainer.querySelector('[data-reason="Other"]');
+
+  customSkipReasons.forEach(reason => {
+    const btn = document.createElement('button');
+    btn.className = 'chip chip-custom';
+    btn.dataset.reason = reason;
+    btn.textContent = reason;
+    reasonChipsContainer.insertBefore(btn, otherBtn);
   });
+}
+
+reasonChipsContainer.addEventListener('click', (e) => {
+  const chip = e.target.closest('.chip');
+  if (!chip) return;
+
+  if (chip.dataset.reason === 'Other') {
+    // Reveal the text box instead of submitting immediately — the actual
+    // reason gets captured on explicit submit below.
+    otherReasonWrap.hidden = false;
+    otherReasonText.value = '';
+    otherReasonText.focus();
+    return;
+  }
+  submitSkip_(chip.dataset.reason);
 });
 
 otherReasonSubmit.addEventListener('click', () => {
