@@ -39,6 +39,20 @@ body {
   color: var(--page-ink);
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.queue-depth {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--page-ink);
+  opacity: 0.65;
+}
+
 /* ---- Batch progress: the signature element ---- */
 .batch-tracker {
   display: flex;
