@@ -15,7 +15,10 @@
   <div class="wordmark">Gen2</div>
 
   <div class="header-right">
-    <span class="queue-depth" id="queueDepth"></span>
+    <div class="queue-dropdown">
+      <button class="queue-depth" id="queueDepth" type="button" aria-expanded="false"></button>
+      <div class="queue-preview-panel" id="queuePreviewPanel" hidden></div>
+    </div>
     <div class="batch-tracker" id="batchTracker" aria-label="Today's batch progress">
       <!-- 5 cup icons injected by app.js -->
     </div>
