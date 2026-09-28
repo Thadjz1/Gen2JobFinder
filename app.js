@@ -1,11 +1,12 @@
 // ============================================================
 // CONFIG — your deployed Apps Script Web App URL
 // ============================================================
-const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzG74xFfSUfgcQt4VuMNnp84HjUptvYGVadgop0efzHaVhcODafcq92m1pbvnJ6oOk/exec';
+const WEB_APP_URL = 'PASTE_YOUR_WEB_APP_URL_HERE';
 
 const board = document.getElementById('board');
 const batchTracker = document.getElementById('batchTracker');
 const queueDepthEl = document.getElementById('queueDepth');
+const queuePreviewPanel = document.getElementById('queuePreviewPanel');
 const reasonOverlay = document.getElementById('reasonOverlay');
 const reasonCancel = document.getElementById('reasonCancel');
 
@@ -14,6 +15,7 @@ let currentJobs = [];   // the batch currently on screen
 let jobStates = {};     // jobId -> 'pending' | 'completed' | 'skipped'
 let openCoverLetterJobId = null; // which card (if any) has its editor panel expanded
 let customSkipReasons = []; // learned reasons from past "Other" submissions
+let queuePreviewData = []; // {company, title, score} for everything waiting in Queue
 const autosaveTimers = {}; // jobId -> debounce timer handle
 
 // ---- Batch progress tracker (cups fill in as cards get completed/skipped) ----
@@ -48,6 +50,8 @@ function fetchJobs() {
     currentJobs.forEach(j => { jobStates[j.JobID] = 'pending'; });
     openCoverLetterJobId = null;
     updateQueueDepth_(data.queueCount);
+    queuePreviewData = data.queuePreview || [];
+    renderQueuePreview_();
     customSkipReasons = data.customReasons || [];
     renderCustomReasonChips_();
     renderBoard();
@@ -69,6 +73,51 @@ function updateQueueDepth_(count) {
     return;
   }
   queueDepthEl.textContent = count === 1 ? '1 more waiting' : `${count} more waiting`;
+}
+
+// ---- Queue preview dropdown: see which companies are lined up in the pool ----
+function renderQueuePreview_() {
+  if (!queuePreviewData.length) {
+    queuePreviewPanel.innerHTML = `<div class="queue-preview-empty">Nothing queued up right now.</div>`;
+    return;
+  }
+  queuePreviewPanel.innerHTML = queuePreviewData.map(row => `
+    <div class="queue-preview-row">
+      <span class="queue-preview-company">${escapeHtml_(row.company || 'Unknown company')}</span>
+      <span class="queue-preview-title">${escapeHtml_(row.title || '')}</span>
+      <span class="queue-preview-score">Score ${row.score}</span>
+    </div>
+  `).join('');
+}
+
+function toggleQueuePreview_() {
+  const isHidden = queuePreviewPanel.hasAttribute('hidden');
+  if (isHidden) {
+    queuePreviewPanel.removeAttribute('hidden');
+    queueDepthEl.setAttribute('aria-expanded', 'true');
+  } else {
+    queuePreviewPanel.setAttribute('hidden', '');
+    queueDepthEl.setAttribute('aria-expanded', 'false');
+  }
+}
+
+queueDepthEl.addEventListener('click', (evt) => {
+  evt.stopPropagation();
+  toggleQueuePreview_();
+});
+
+// Close the dropdown on any click elsewhere on the page
+document.addEventListener('click', (evt) => {
+  if (!queuePreviewPanel.hasAttribute('hidden') && !queuePreviewPanel.contains(evt.target)) {
+    queuePreviewPanel.setAttribute('hidden', '');
+    queueDepthEl.setAttribute('aria-expanded', 'false');
+  }
+});
+
+function escapeHtml_(str) {
+  const div = document.createElement('div');
+  div.textContent = str == null ? '' : String(str);
+  return div.innerHTML;
 }
 
 function cleanupJsonpScript_(callbackName, script) {
