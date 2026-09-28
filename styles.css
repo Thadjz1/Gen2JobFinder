@@ -476,9 +476,16 @@ body {
 }
 
 /* Keep real content above the decorative plants */
-.site-header, .board {
+.board {
   position: relative;
   z-index: 1;
+}
+
+/* Header sits in its own, higher stacking context so its queue-preview
+   dropdown always paints above the cards below it, not underneath them. */
+.site-header {
+  position: relative;
+  z-index: 5;
 }
 
 .other-reason-wrap {
