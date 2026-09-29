@@ -136,7 +136,14 @@ queuePreviewPanel.addEventListener('click', (evt) => {
     row.classList.add('is-loading');
     callBackend_({ action: 'promoteFromQueue', jobId }, (data) => {
       if (!data.ok) {
-        row.classList.remove('is-loading');
+        queuePreviewData = data.queuePreview || queuePreviewData;
+        updateQueueDepth_(data.queueCount);
+        renderQueuePreview_();
+        if (data.closed) {
+          alert("That posting's already closed — it's been removed from your queue.");
+        } else {
+          row.classList.remove('is-loading');
+        }
         return;
       }
       currentJobs = data.jobs || currentJobs;
